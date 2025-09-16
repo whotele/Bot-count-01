@@ -1,0 +1,27 @@
+name: Auto Start VPS on Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Restore backup (nếu có)
+        run: bash ./backupre-store.sh restore_backup
+
+      - name: Chạy VPS script
+        run: |
+          echo "🚀 Starting VPS..."
+          # Ví dụ chạy server.js
+          # node server.js
+          # hoặc script khác tùy bạn
+
+      - name: Backup sau khi chạy
+        run: bash ./backupre-store.sh backup_and_upload
