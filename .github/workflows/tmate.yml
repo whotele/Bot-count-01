@@ -1,0 +1,81 @@
+name: Create VPS (Auto Restart)
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [create-vps]
+
+jobs:
+  start-vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      TMATE_SERVER: nyc1.tmate.io
+
+    steps:
+      - name: " Checkout"
+        uses: actions/checkout@v3
+
+      - name: " Prepare dirs"
+        run: mkdir -p links .backup
+
+      - name: " Restore backup (optional)"
+        run: |
+          name="${{ github.event.client_payload.vps_name }}"
+          [ -z "$name" ] && name="manual-vps"
+          if [ "${{ github.event.client_payload.backup }}" == "true" ]; then
+            unzip ".backup/$name.zip" -d . || echo "?? No backup found."
+          fi
+
+      - name: " Start tmate session"
+        run: |
+          sudo apt update -y && sudo apt install -y tmate
+          tmate -S /tmp/tmate.sock new-session -d
+          tmate -S /tmp/tmate.sock wait tmate-ready
+          SSH=$(tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}')
+          name="${{ github.event.client_payload.vps_name }}"
+          [ -z "$name" ] && name="manual-vps"
+          echo "$SSH" | tee "links/$name.txt"
+
+      - name: " Start Playit Tunnel"
+        run: |
+          wget -q https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64 -O playit
+          chmod +x playit
+          nohup ./playit > playit.log 2>&1 &
+          echo "? Playit started in background."
+
+      - name: " Setup VPS"
+        run: |      
+         pip install gdown 
+         gdown --id 1QIFcCgZwjjNE48RmoH8oZvSux98_8r3u
+         sed -i 's/\r$//' setup.sh
+         chmod +x setup.sh
+         bash setup.sh
+      - name: " Save backup"
+        run: |
+          name="${{ github.event.client_payload.vps_name }}"
+          [ -z "$name" ] && name="manual-vps"
+          zip -qr ".backup/$name.zip" . -x ".git/*" ".github/*" ".backup/*" || true
+
+      - name: " Push updated files"
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "?? Updated SSH + backup"
+          file_pattern: 'links/*.txt .backup/*.zip'
+
+      - name: " Keep VPS alive"
+        run: |
+          for i in $(seq 1 360); do
+            echo "?? Running minute $i/360..."
+            sleep 60
+          done
+
+      - name: " Restart workflow"
+        if: always()
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer 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" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/${{ github.repository }}/dispatches \
+            -d '{"event_type": "create-vps", "client_payload": {"vps_name": "manual-vps", "backup": true}}'
