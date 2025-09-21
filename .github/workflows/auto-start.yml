@@ -1,0 +1,17 @@
+name: Auto Start VPS on Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Restore backup 
+        run: bash ./backupre-store.sh restore_backup
